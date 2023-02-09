@@ -178,6 +178,15 @@ static void draw_char(uint16_t x_pos, uint8_t character){
     }
 }
 
+static void draw_string(const char * text, uint16_t x_pos){
+    uint16_t i;
+    clear_screen();
+    for (i=0;i<strlen(text);i++){
+        draw_char(x_pos + i * 8, text[i]);
+    }
+    update_requested = true;            
+}
+
 void app_main(void)
 {
     // configure board LED and turn off
@@ -219,29 +228,27 @@ void app_main(void)
     gpio_intr_enable(ROTATION_GPIO);
 
     uint16_t rotation_offset = 0;
-    const char text[] = "Hello World!";
 
     while (1){
 
 #ifdef USE_TIMER_FOR_PIXEL
 
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-
+        // next update possible
         if (update_requested == false){
 
-            clear_screen();
-
-            for (i=0;i<strlen(text);i++){
-                draw_char(rotation_offset + i * 8, text[i]);
-            }
+            // draw text
+            draw_string("Hello World!", rotation_offset);
             
+            // move text one pixel to the left
             if (rotation_offset == 0){
                 rotation_offset = NUM_PIXELS;
             }  
             rotation_offset--;
 
-            update_requested = true;            
         }
+
+        // wait a bit
+        vTaskDelay(10 / portTICK_PERIOD_MS);
 
 #else
         // wait for startup
