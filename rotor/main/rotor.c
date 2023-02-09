@@ -63,16 +63,8 @@ static uint8_t framebuffer_live[NUM_PIXELS];
 static uint8_t framebuffer_next[NUM_PIXELS];
 
 // update was requested
-static volatile bool update_requested;
+static volatile int16_t update_requested_at_x;
 
-
-static void set_all_leds(uint8_t value){
-    uint8_t i;
-    for (i=0;i<NUM_POV_LEDS;i++){
-        gpio_set_level(POV_LED_GPIO + i, value);
-    }
-    gpio_set_level(BLINK_GPIO, value);
-}
 
 static void update_leds(uint8_t value){
     gpio_set_level(BLINK_GPIO, value & 1);
@@ -82,12 +74,19 @@ static void update_leds(uint8_t value){
     }
 }
 
-static void update_leds_from_framebuffer(uint16_t x){
-    update_leds(framebuffer_live[NUM_PIXELS - 1 - x]);
+static void update_framebuffer(void){
+    memcpy(framebuffer_live, framebuffer_next, sizeof(framebuffer_next));
 }
 
-static void framebuffer_draw(void){
-    memcpy(framebuffer_live, framebuffer_next, sizeof(framebuffer_next));
+static void update_leds_from_framebuffer(uint16_t x){
+    // update LEDs
+    update_leds(framebuffer_live[NUM_PIXELS - 1 - x]);
+
+    // udpate framebuffer if requested here
+    if (update_requested_at_x == x){
+        update_framebuffer();
+        update_requested_at_x = -1;
+    }
 }
 
 static void IRAM_ATTR gpio_isr_handler(void* arg){
@@ -111,11 +110,6 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
         rotation_us = (rotation_us * (ROTATION_WEIGHT-1) + timer_us) / ROTATION_WEIGHT;
     }
 
-    if (update_requested){
-        framebuffer_draw();
-        update_requested = false;
-    }
-
     // update rotation and pixel time
     gptimer_set_raw_count(gptimer, 0);
     pixel_time_10ns = rotation_us * 100 / NUM_PIXELS;
@@ -129,6 +123,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
     update_leds_from_framebuffer(pixel_pos);
 
     // sechdeul next alarm
+    pixel_pos++;
     next_pixel_10ns += pixel_time_10ns;
     alarm_config.alarm_count = next_pixel_10ns / 100;
     gptimer_set_alarm_action(gptimer, &alarm_config);
@@ -138,23 +133,18 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
 #ifdef USE_TIMER_FOR_PIXEL
 static bool IRAM_ATTR timer_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
 {
+    // set LEDs
+    update_leds_from_framebuffer(pixel_pos);
     pixel_pos++;
 
+    // sechdule next alarm
     if (pixel_pos < NUM_PIXELS){
-
-        // set LEDs
-        update_leds_from_framebuffer(pixel_pos);
-
         // sechdeul next alarm
         next_pixel_10ns += pixel_time_10ns;
         alarm_config.alarm_count = next_pixel_10ns / 100;
         gptimer_set_alarm_action(timer, &alarm_config);
-
-    } else {
-
-        set_all_leds(1);
-
     }
+
     return pdFALSE;
 }
 #endif
@@ -184,7 +174,9 @@ static void draw_string(const char * text, uint16_t x_pos){
     for (i=0;i<strlen(text);i++){
         draw_char(x_pos + i * 8, text[i]);
     }
-    update_requested = true;            
+
+    // request update when 'cursor' is 5 pixels left from the string
+    update_requested_at_x = (NUM_PIXELS - 1 - x_pos + 5) % NUM_PIXELS;
 }
 
 void app_main(void)
@@ -234,7 +226,7 @@ void app_main(void)
 #ifdef USE_TIMER_FOR_PIXEL
 
         // next update possible
-        if (update_requested == false){
+        if (update_requested_at_x < 0){
 
             // draw text
             draw_string("Hello World!", rotation_offset);
