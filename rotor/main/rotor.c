@@ -219,7 +219,7 @@ void app_main(void)
     gpio_intr_enable(ROTATION_GPIO);
 
     uint16_t rotation_offset = 0;
-    const char text[] = "Hallo World!";
+    const char text[] = "Hello World!";
 
     while (1){
 
