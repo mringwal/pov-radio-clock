@@ -229,7 +229,7 @@ void app_main(void)
         if (update_requested_at_x < 0){
 
             // draw text
-            draw_string("Hello World!", rotation_offset);
+            draw_string("POV Display with ESP32-C3 and 30 Hz!", rotation_offset);
             
             // move text one pixel to the left
             if (rotation_offset == 0){
